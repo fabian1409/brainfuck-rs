@@ -1,25 +1,25 @@
 use std::{
     env,
     fs::read_to_string,
-    io::{self, Read, Stdin, Stdout, Write},
+    io::{self, Read, Write},
 };
 
-struct Brainfuck {
+struct Brainfuck<'a, R: Read, W: Write> {
     ip: usize,
     dp: usize,
     data: Vec<u8>,
-    stdin: Stdin,
-    stdout: Stdout,
+    read: &'a mut R,
+    write: &'a mut W,
 }
 
-impl Brainfuck {
-    fn new() -> Brainfuck {
+impl<'a, R: Read, W: Write> Brainfuck<'a, R, W> {
+    fn new(read: &'a mut R, write: &'a mut W) -> Brainfuck<'a, R, W> {
         Brainfuck {
             ip: 0,
             dp: 0,
             data: vec![0; 30_000],
-            stdin: io::stdin(),
-            stdout: io::stdout(),
+            read,
+            write,
         }
     }
 
@@ -29,14 +29,14 @@ impl Brainfuck {
             match program[self.ip] {
                 '>' => self.dp += 1,
                 '<' => self.dp -= 1,
-                '+' => self.data[self.dp] += 1,
-                '-' => self.data[self.dp] -= 1,
+                '+' => self.data[self.dp] = self.data[self.dp].wrapping_add(1),
+                '-' => self.data[self.dp] = self.data[self.dp].wrapping_sub(1),
                 '.' => self
-                    .stdout
+                    .write
                     .write_all(&self.data[self.dp..self.dp + 1])
                     .expect("output failed"),
                 ',' => self
-                    .stdin
+                    .read
                     .read_exact(&mut self.data[self.dp..self.dp + 1])
                     .expect("input failed"),
                 '[' => {
@@ -83,25 +83,24 @@ impl Brainfuck {
 fn main() {
     let program = env::args().nth(1).expect("expected program file");
     let program = read_to_string(program).expect("failed to read program");
-    let mut bf = Brainfuck::new();
+    let mut input = io::stdin();
+    let mut output = io::stdout();
+    let mut bf = Brainfuck::new(&mut input, &mut output);
     bf.execute(&program);
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use crate::Brainfuck;
 
     #[test]
-    fn simple() {
-        let mut bf = Brainfuck::new();
-        bf.execute("++++++++");
-        assert_eq!(bf.data[0], 8);
-    }
-
-    #[test]
-    fn skip() {
-        let mut bf = Brainfuck::new();
-        bf.execute("[+++++++]");
-        assert_eq!(bf.data[0], 0);
+    fn hello_world() {
+        let mut input = io::stdin();
+        let mut output = Vec::new();
+        let mut bf = Brainfuck::new(&mut input, &mut output);
+        bf.execute("++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.");
+        assert_eq!(output, b"Hello World!\n");
     }
 }
